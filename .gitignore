@@ -1,0 +1,24 @@
+# IDE and operating-system files
+.idea/
+.vscode/
+.DS_Store
+*.suo
+*.user
+
+# .NET output
+**/bin/
+**/obj/
+TestResults/
+coverage/
+
+# Frontend output
+**/node_modules/
+**/dist/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+**/appsettings.Local.json
+**/appsettings.*.Local.json
+**/secrets.json
