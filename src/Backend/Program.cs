@@ -6,6 +6,7 @@ using MeetingRoomBooking.Api.Infrastructure.Persistence.Seed;
 using MeetingRoomBooking.Api.Modules.Auth;
 using MeetingRoomBooking.Api.Modules.Auth.Jwt;
 using MeetingRoomBooking.Api.Modules.Auth.Seed;
+using MeetingRoomBooking.Api.Modules.Resources;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -102,6 +103,8 @@ app.MapGet("/health", () => TypedResults.Ok(new HealthResponse("Healthy")))
     .WithOpenApi();
 
 app.MapAuthEndpoints(allowedOrigins);
+app.MapResourceEndpoints();
+app.MapAdminResourceEndpoints();
 
 // Production migration/seeding is a deliberate deploy-time step (not yet built; this
 // stage has no deployment pipeline). Development auto-applies so `dotnet run` and the

@@ -1,18 +1,6 @@
-using Microsoft.AspNetCore.Http.HttpResults;
+using MeetingRoomBooking.Api.Infrastructure.Http;
 
 namespace MeetingRoomBooking.Api.Modules.Auth;
-
-public sealed record ProblemType(string Type, string Title, string Code)
-{
-    public ProblemHttpResult ToResult(int statusCode, string instance, string? detail = null) =>
-        TypedResults.Problem(
-            type: Type,
-            title: Title,
-            statusCode: statusCode,
-            detail: detail,
-            instance: instance,
-            extensions: new Dictionary<string, object?> { ["code"] = Code });
-}
 
 /// <summary>
 /// RFC 7807 problem types for the Auth module's own conflicts — distinct from Bookings'
