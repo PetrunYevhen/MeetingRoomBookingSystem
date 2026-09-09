@@ -19,8 +19,6 @@ namespace Backend.IntegrationTests;
 [Collection(DatabaseCollection.Name)]
 public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory>
 {
-    private const string Password = "Str0ngP@ssword1";
-
     private readonly ApiApplicationFactory _factory;
     private readonly HttpClient _client;
 
@@ -33,10 +31,10 @@ public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory
     [Fact]
     public async Task ListResources_AsUser_ContainsCreatedResource()
     {
-        var (resourceId, _) = await CreateResourceAsAdminAsync();
-        var userToken = await RegisterAndLoginUserAsync();
+        var (resourceId, _) = await _client.CreateResourceAsAdminAsync(await AdminTokenAsync());
+        var userToken = await _client.RegisterAndLoginUserAsync();
 
-        var response = await SendAsync(HttpMethod.Get, "/api/v1/resources", userToken);
+        var response = await _client.SendAuthorizedAsync(HttpMethod.Get, "/api/v1/resources", userToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var resources = await response.Content.ReadFromJsonAsync<List<ResourceDto>>();
@@ -46,9 +44,10 @@ public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory
     [Fact]
     public async Task GetResource_NotFound_Returns404()
     {
-        var userToken = await RegisterAndLoginUserAsync();
+        var userToken = await _client.RegisterAndLoginUserAsync();
 
-        var response = await SendAsync(HttpMethod.Get, $"/api/v1/resources/{Guid.NewGuid()}", userToken);
+        var response = await _client.SendAuthorizedAsync(
+            HttpMethod.Get, $"/api/v1/resources/{Guid.NewGuid()}", userToken);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -56,10 +55,10 @@ public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory
     [Fact]
     public async Task CreateResource_AsUser_ReturnsForbidden()
     {
-        var userToken = await RegisterAndLoginUserAsync();
+        var userToken = await _client.RegisterAndLoginUserAsync();
 
-        var response = await SendAsync(
-            HttpMethod.Post, "/api/v1/admin/resources", userToken, new { name = NewName("Room") });
+        var response = await _client.SendAuthorizedAsync(
+            HttpMethod.Post, "/api/v1/admin/resources", userToken, new { name = ApiTestHelpers.NewName("Room") });
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -67,18 +66,19 @@ public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory
     [Fact]
     public async Task GetResourceSlots_ReportsBookedAndAvailableStatus_AndFiltersByDateRange()
     {
-        var adminToken = await LoginAsAdminAsync();
-        var (resourceId, _) = await CreateResourceAsAdminAsync(adminToken);
+        var adminToken = await AdminTokenAsync();
+        var (resourceId, _) = await _client.CreateResourceAsAdminAsync(adminToken);
 
         var soon = DateTime.UtcNow.AddDays(1);
         var far = DateTime.UtcNow.AddDays(10);
-        var earlySlot = await CreateSlotAsAdminAsync(adminToken, resourceId, soon, soon.AddHours(1));
-        var lateSlot = await CreateSlotAsAdminAsync(adminToken, resourceId, far, far.AddHours(1));
+        var earlySlot = await _client.CreateSlotAsAdminAsync(adminToken, resourceId, soon, soon.AddHours(1));
+        var lateSlot = await _client.CreateSlotAsAdminAsync(adminToken, resourceId, far, far.AddHours(1));
 
         await InsertBookingDirectlyAsync(earlySlot.Id);
 
-        var userToken = await RegisterAndLoginUserAsync();
-        var response = await SendAsync(HttpMethod.Get, $"/api/v1/resources/{resourceId}/slots", userToken);
+        var userToken = await _client.RegisterAndLoginUserAsync();
+        var response = await _client.SendAuthorizedAsync(
+            HttpMethod.Get, $"/api/v1/resources/{resourceId}/slots", userToken);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var slots = await response.Content.ReadFromJsonAsync<List<TimeSlotDto>>();
         Assert.NotNull(slots);
@@ -86,7 +86,7 @@ public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory
         Assert.Equal("available", slots.Single(s => s.Id == lateSlot.Id).Status);
 
         var fromUtc = Uri.EscapeDataString(DateTime.UtcNow.AddDays(5).ToString("O"));
-        var filtered = await SendAsync(
+        var filtered = await _client.SendAuthorizedAsync(
             HttpMethod.Get, $"/api/v1/resources/{resourceId}/slots?fromUtc={fromUtc}", userToken);
         var filteredSlots = await filtered.Content.ReadFromJsonAsync<List<TimeSlotDto>>();
         Assert.DoesNotContain(filteredSlots!, s => s.Id == earlySlot.Id);
@@ -96,11 +96,11 @@ public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory
     [Fact]
     public async Task UpdateResource_ReplacesName()
     {
-        var adminToken = await LoginAsAdminAsync();
-        var (resourceId, _) = await CreateResourceAsAdminAsync(adminToken);
-        var newName = NewName("Renamed");
+        var adminToken = await AdminTokenAsync();
+        var (resourceId, _) = await _client.CreateResourceAsAdminAsync(adminToken);
+        var newName = ApiTestHelpers.NewName("Renamed");
 
-        var response = await SendAsync(
+        var response = await _client.SendAuthorizedAsync(
             HttpMethod.Put, $"/api/v1/admin/resources/{resourceId}", adminToken, new { name = newName });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -111,10 +111,11 @@ public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory
     [Fact]
     public async Task DeleteResource_WithoutSlots_ReturnsNoContent()
     {
-        var adminToken = await LoginAsAdminAsync();
-        var (resourceId, _) = await CreateResourceAsAdminAsync(adminToken);
+        var adminToken = await AdminTokenAsync();
+        var (resourceId, _) = await _client.CreateResourceAsAdminAsync(adminToken);
 
-        var response = await SendAsync(HttpMethod.Delete, $"/api/v1/admin/resources/{resourceId}", adminToken);
+        var response = await _client.SendAuthorizedAsync(
+            HttpMethod.Delete, $"/api/v1/admin/resources/{resourceId}", adminToken);
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
@@ -122,12 +123,13 @@ public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory
     [Fact]
     public async Task DeleteResource_WithSlots_ReturnsConflict()
     {
-        var adminToken = await LoginAsAdminAsync();
-        var (resourceId, _) = await CreateResourceAsAdminAsync(adminToken);
+        var adminToken = await AdminTokenAsync();
+        var (resourceId, _) = await _client.CreateResourceAsAdminAsync(adminToken);
         var start = DateTime.UtcNow.AddDays(1);
-        await CreateSlotAsAdminAsync(adminToken, resourceId, start, start.AddHours(1));
+        await _client.CreateSlotAsAdminAsync(adminToken, resourceId, start, start.AddHours(1));
 
-        var response = await SendAsync(HttpMethod.Delete, $"/api/v1/admin/resources/{resourceId}", adminToken);
+        var response = await _client.SendAuthorizedAsync(
+            HttpMethod.Delete, $"/api/v1/admin/resources/{resourceId}", adminToken);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetailsDto>();
@@ -137,11 +139,11 @@ public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory
     [Fact]
     public async Task CreateSlot_InvalidRange_ReturnsBadRequest()
     {
-        var adminToken = await LoginAsAdminAsync();
-        var (resourceId, _) = await CreateResourceAsAdminAsync(adminToken);
+        var adminToken = await AdminTokenAsync();
+        var (resourceId, _) = await _client.CreateResourceAsAdminAsync(adminToken);
         var start = DateTime.UtcNow.AddDays(1);
 
-        var response = await SendAsync(
+        var response = await _client.SendAuthorizedAsync(
             HttpMethod.Post, $"/api/v1/admin/resources/{resourceId}/slots", adminToken,
             new { startUtc = start, endUtc = start });
 
@@ -153,13 +155,13 @@ public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory
     [Fact]
     public async Task CreateSlot_DuplicateRange_ReturnsConflict()
     {
-        var adminToken = await LoginAsAdminAsync();
-        var (resourceId, _) = await CreateResourceAsAdminAsync(adminToken);
+        var adminToken = await AdminTokenAsync();
+        var (resourceId, _) = await _client.CreateResourceAsAdminAsync(adminToken);
         var start = DateTime.UtcNow.AddDays(1);
         var end = start.AddHours(1);
-        await CreateSlotAsAdminAsync(adminToken, resourceId, start, end);
+        await _client.CreateSlotAsAdminAsync(adminToken, resourceId, start, end);
 
-        var response = await SendAsync(
+        var response = await _client.SendAuthorizedAsync(
             HttpMethod.Post, $"/api/v1/admin/resources/{resourceId}/slots", adminToken,
             new { startUtc = start, endUtc = end });
 
@@ -171,13 +173,13 @@ public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory
     [Fact]
     public async Task UpdateSlot_OnBookedSlot_ReturnsConflict()
     {
-        var adminToken = await LoginAsAdminAsync();
-        var (resourceId, _) = await CreateResourceAsAdminAsync(adminToken);
+        var adminToken = await AdminTokenAsync();
+        var (resourceId, _) = await _client.CreateResourceAsAdminAsync(adminToken);
         var start = DateTime.UtcNow.AddDays(1);
-        var slot = await CreateSlotAsAdminAsync(adminToken, resourceId, start, start.AddHours(1));
+        var slot = await _client.CreateSlotAsAdminAsync(adminToken, resourceId, start, start.AddHours(1));
         await InsertBookingDirectlyAsync(slot.Id);
 
-        var response = await SendAsync(
+        var response = await _client.SendAuthorizedAsync(
             HttpMethod.Put, $"/api/v1/admin/slots/{slot.Id}", adminToken,
             new { startUtc = start.AddHours(2), endUtc = start.AddHours(3) });
 
@@ -189,13 +191,13 @@ public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory
     [Fact]
     public async Task DeleteSlot_OnBookedSlot_ReturnsConflict()
     {
-        var adminToken = await LoginAsAdminAsync();
-        var (resourceId, _) = await CreateResourceAsAdminAsync(adminToken);
+        var adminToken = await AdminTokenAsync();
+        var (resourceId, _) = await _client.CreateResourceAsAdminAsync(adminToken);
         var start = DateTime.UtcNow.AddDays(1);
-        var slot = await CreateSlotAsAdminAsync(adminToken, resourceId, start, start.AddHours(1));
+        var slot = await _client.CreateSlotAsAdminAsync(adminToken, resourceId, start, start.AddHours(1));
         await InsertBookingDirectlyAsync(slot.Id);
 
-        var response = await SendAsync(HttpMethod.Delete, $"/api/v1/admin/slots/{slot.Id}", adminToken);
+        var response = await _client.SendAuthorizedAsync(HttpMethod.Delete, $"/api/v1/admin/slots/{slot.Id}", adminToken);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetailsDto>();
@@ -205,52 +207,18 @@ public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory
     [Fact]
     public async Task DeleteSlot_Unbooked_ReturnsNoContent()
     {
-        var adminToken = await LoginAsAdminAsync();
-        var (resourceId, _) = await CreateResourceAsAdminAsync(adminToken);
+        var adminToken = await AdminTokenAsync();
+        var (resourceId, _) = await _client.CreateResourceAsAdminAsync(adminToken);
         var start = DateTime.UtcNow.AddDays(1);
-        var slot = await CreateSlotAsAdminAsync(adminToken, resourceId, start, start.AddHours(1));
+        var slot = await _client.CreateSlotAsAdminAsync(adminToken, resourceId, start, start.AddHours(1));
 
-        var response = await SendAsync(HttpMethod.Delete, $"/api/v1/admin/slots/{slot.Id}", adminToken);
+        var response = await _client.SendAuthorizedAsync(HttpMethod.Delete, $"/api/v1/admin/slots/{slot.Id}", adminToken);
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
-    private async Task<string> LoginAsAdminAsync()
-    {
-        var configuration = _factory.Services.GetRequiredService<IConfiguration>();
-        var email = configuration["Admin:Email"]!;
-        var password = configuration["Admin:Password"]!;
-
-        var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password });
-        var body = await response.Content.ReadFromJsonAsync<AuthResponseDto>();
-        return body!.AccessToken;
-    }
-
-    private async Task<string> RegisterAndLoginUserAsync()
-    {
-        var email = $"resource-test-{Guid.NewGuid()}@example.com";
-        await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password = Password });
-        var response = await _client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = Password });
-        var body = await response.Content.ReadFromJsonAsync<AuthResponseDto>();
-        return body!.AccessToken;
-    }
-
-    private async Task<(Guid Id, string Name)> CreateResourceAsAdminAsync(string? adminToken = null)
-    {
-        adminToken ??= await LoginAsAdminAsync();
-        var name = NewName("Room");
-        var response = await SendAsync(HttpMethod.Post, "/api/v1/admin/resources", adminToken, new { name });
-        var created = await response.Content.ReadFromJsonAsync<ResourceDto>();
-        return (created!.Id, created.Name);
-    }
-
-    private async Task<TimeSlotDto> CreateSlotAsAdminAsync(
-        string adminToken, Guid resourceId, DateTime startUtc, DateTime endUtc)
-    {
-        var response = await SendAsync(
-            HttpMethod.Post, $"/api/v1/admin/resources/{resourceId}/slots", adminToken, new { startUtc, endUtc });
-        return (await response.Content.ReadFromJsonAsync<TimeSlotDto>())!;
-    }
+    private async Task<string> AdminTokenAsync() =>
+        await _client.LoginAsAdminAsync(_factory.Services.GetRequiredService<IConfiguration>());
 
     private async Task InsertBookingDirectlyAsync(Guid timeSlotId)
     {
@@ -267,28 +235,4 @@ public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory
         dbContext.Bookings.Add(new Booking { Id = Guid.NewGuid(), TimeSlotId = timeSlotId, UserId = owner.Id });
         await dbContext.SaveChangesAsync();
     }
-
-    private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, string accessToken, object? body = null)
-    {
-        using var request = new HttpRequestMessage(method, url);
-        request.Headers.Add("Authorization", $"Bearer {accessToken}");
-        if (body is not null)
-        {
-            request.Content = JsonContent.Create(body);
-        }
-
-        return await _client.SendAsync(request);
-    }
-
-    private static string NewName(string prefix) => $"{prefix}-{Guid.NewGuid()}";
-
-    private sealed record ResourceDto(Guid Id, string Name);
-
-    private sealed record TimeSlotDto(Guid Id, DateTime StartUtc, DateTime EndUtc, string Status);
-
-    private sealed record UserProfileDto(Guid Id, string Email, string[] Roles);
-
-    private sealed record AuthResponseDto(string AccessToken, DateTime AccessTokenExpiresAtUtc, UserProfileDto User);
-
-    private sealed record ProblemDetailsDto(string Type, string Title, int Status, string? Detail, string? Instance, string Code);
 }

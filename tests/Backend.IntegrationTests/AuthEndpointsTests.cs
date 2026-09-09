@@ -32,7 +32,7 @@ public sealed class AuthEndpointsTests : IClassFixture<ApiApplicationFactory>
     {
         var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new
         {
-            email = NewEmail(),
+            email = ApiTestHelpers.NewEmail(),
             password = Password,
         });
 
@@ -46,7 +46,7 @@ public sealed class AuthEndpointsTests : IClassFixture<ApiApplicationFactory>
     [Fact]
     public async Task Register_DuplicateEmail_ReturnsConflict()
     {
-        var email = NewEmail();
+        var email = ApiTestHelpers.NewEmail();
         await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password = Password });
 
         var response = await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password = Password });
@@ -60,7 +60,7 @@ public sealed class AuthEndpointsTests : IClassFixture<ApiApplicationFactory>
     public async Task Register_WeakPassword_ReturnsBadRequest()
     {
         var response = await _client.PostAsJsonAsync(
-            "/api/v1/auth/register", new { email = NewEmail(), password = "weak" });
+            "/api/v1/auth/register", new { email = ApiTestHelpers.NewEmail(), password = "weak" });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetailsDto>();
@@ -70,13 +70,13 @@ public sealed class AuthEndpointsTests : IClassFixture<ApiApplicationFactory>
     [Fact]
     public async Task Login_WrongPasswordAndNonexistentEmail_ReturnSameGenericProblem()
     {
-        var email = NewEmail();
+        var email = ApiTestHelpers.NewEmail();
         await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password = Password });
 
         var wrongPassword = await _client.PostAsJsonAsync(
             "/api/v1/auth/login", new { email, password = "SomethingElse1!" });
         var nonexistentEmail = await _client.PostAsJsonAsync(
-            "/api/v1/auth/login", new { email = NewEmail(), password = Password });
+            "/api/v1/auth/login", new { email = ApiTestHelpers.NewEmail(), password = Password });
 
         Assert.Equal(HttpStatusCode.Unauthorized, wrongPassword.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, nonexistentEmail.StatusCode);
@@ -98,7 +98,7 @@ public sealed class AuthEndpointsTests : IClassFixture<ApiApplicationFactory>
     [Fact]
     public async Task Me_WithValidToken_ReturnsProfile()
     {
-        var email = NewEmail();
+        var email = ApiTestHelpers.NewEmail();
         await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password = Password });
         var login = await LoginAsync(email);
 
@@ -114,7 +114,7 @@ public sealed class AuthEndpointsTests : IClassFixture<ApiApplicationFactory>
     [Fact]
     public async Task Refresh_ValidCookieAndOrigin_RotatesTokenAndCookie()
     {
-        var email = NewEmail();
+        var email = ApiTestHelpers.NewEmail();
         await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password = Password });
         var login = await LoginAsync(email);
 
@@ -134,7 +134,7 @@ public sealed class AuthEndpointsTests : IClassFixture<ApiApplicationFactory>
     [Fact]
     public async Task Refresh_MissingOrAllowlistedOrigin_ReturnsForbidden()
     {
-        var email = NewEmail();
+        var email = ApiTestHelpers.NewEmail();
         await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password = Password });
         var login = await LoginAsync(email);
 
@@ -148,7 +148,7 @@ public sealed class AuthEndpointsTests : IClassFixture<ApiApplicationFactory>
     [Fact]
     public async Task Refresh_ReusedRevokedToken_RevokesWholeFamily()
     {
-        var email = NewEmail();
+        var email = ApiTestHelpers.NewEmail();
         await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password = Password });
         var login = await LoginAsync(email);
 
@@ -167,7 +167,7 @@ public sealed class AuthEndpointsTests : IClassFixture<ApiApplicationFactory>
     [Fact]
     public async Task Logout_RevokesSession_SubsequentRefreshFails()
     {
-        var email = NewEmail();
+        var email = ApiTestHelpers.NewEmail();
         await _client.PostAsJsonAsync("/api/v1/auth/register", new { email, password = Password });
         var login = await LoginAsync(email);
 
@@ -218,12 +218,4 @@ public sealed class AuthEndpointsTests : IClassFixture<ApiApplicationFactory>
 
     private static string ExtractCookiePair(HttpResponseMessage response) =>
         response.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
-
-    private static string NewEmail() => $"user-{Guid.NewGuid()}@example.com";
-
-    private sealed record UserProfileDto(Guid Id, string Email, string[] Roles);
-
-    private sealed record AuthResponseDto(string AccessToken, DateTime AccessTokenExpiresAtUtc, UserProfileDto User);
-
-    private sealed record ProblemDetailsDto(string Type, string Title, int Status, string? Detail, string? Instance, string Code);
 }
