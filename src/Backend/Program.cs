@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
+using System.Text.Json;
 using MeetingRoomBooking.Api.Configuration;
 using MeetingRoomBooking.Api.Infrastructure.Persistence;
 using MeetingRoomBooking.Api.Infrastructure.Persistence.Seed;
@@ -7,6 +8,7 @@ using MeetingRoomBooking.Api.Modules.Auth;
 using MeetingRoomBooking.Api.Modules.Auth.Jwt;
 using MeetingRoomBooking.Api.Modules.Auth.Seed;
 using MeetingRoomBooking.Api.Modules.Bookings;
+using MeetingRoomBooking.Api.Modules.Realtime;
 using MeetingRoomBooking.Api.Modules.Resources;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -51,7 +53,12 @@ var jwtOptions = JwtOptionsValidation.Validate(new JwtOptions
 builder.Services.AddSingleton(jwtOptions);
 builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddScoped<RefreshTokenService>();
-builder.Services.AddSingleton<IBookingNotifier, NoOpBookingNotifier>();
+builder.Services.AddSingleton<IBookingNotifier, SignalRBookingNotifier>();
+
+builder.Services
+    .AddSignalR()
+    .AddJsonProtocol(options =>
+        options.PayloadSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -69,6 +76,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             RoleClaimType = JwtTokenService.RoleClaimType,
             NameClaimType = JwtRegisteredClaimNames.Sub,
             ClockSkew = TimeSpan.FromSeconds(30),
+        };
+        options.Events = new JwtBearerEvents
+        {
+            // Browsers can't attach an Authorization header to a WebSocket handshake; the
+            // SignalR JS client sends the token as a query-string parameter instead. Scoped
+            // to /hubs so REST endpoints never accept a query-string token.
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    context.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            },
         };
     });
 
@@ -108,6 +132,7 @@ app.MapAuthEndpoints(allowedOrigins);
 app.MapResourceEndpoints();
 app.MapAdminResourceEndpoints();
 app.MapBookingEndpoints();
+app.MapHub<BookingHub>("/hubs/bookings");
 
 // Production migration/seeding is a deliberate deploy-time step (not yet built; this
 // stage has no deployment pipeline). Development auto-applies so `dotnet run` and the
