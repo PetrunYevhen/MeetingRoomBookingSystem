@@ -11,10 +11,10 @@ namespace Backend.IntegrationTests;
 
 /// <summary>
 /// End-to-end proof of ADR 0001's Resources read/admin surface against a real SQL Server
-/// (Testcontainers). `DevelopmentDataSeeder` already seeds Falcon/Phoenix in this
-/// environment, so assertions use generated names/Contains rather than exact counts.
-/// No booking endpoint exists yet, so "booked" scenarios insert a `Booking` row directly
-/// through `ApplicationDbContext`, same technique `DatabaseSchemaTests` already uses.
+/// (Testcontainers). `SampleDataSeeder` already seeds Falcon/Phoenix, so assertions use
+/// generated names/Contains rather than exact counts. "Booked" scenarios insert a
+/// `Booking` row directly through `ApplicationDbContext` to keep these tests independent
+/// of the booking endpoint, the same technique `DatabaseSchemaTests` already uses.
 /// </summary>
 [Collection(DatabaseCollection.Name)]
 public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory>

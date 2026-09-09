@@ -151,13 +151,14 @@ if (app.Environment.IsDevelopment())
     await using var scope = app.Services.CreateAsyncScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     await dbContext.Database.MigrateAsync();
-    await DevelopmentDataSeeder.SeedAsync(dbContext);
 }
 
-// Role/admin seeding runs in every environment: both are idempotent and config-gated
+// Seeding runs in every environment: all three seeders are idempotent and config-gated
 // (AdminSeeder no-ops without Admin:Email/Admin:Password), so this is what actually
 // satisfies ADR 0001's "administrators are provisioned through a controlled
-// deployment/seed process" instead of that only ever happening in Development.
+// deployment/seed process" instead of that only ever happening in Development. Sample
+// rooms/slots are seeded here too, because a deployed app whose room list is empty until
+// someone hand-posts admin REST calls isn't reviewable.
 {
     await using var scope = app.Services.CreateAsyncScope();
 
@@ -166,6 +167,9 @@ if (app.Environment.IsDevelopment())
 
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
     await AdminSeeder.SeedAsync(userManager, app.Configuration, app.Logger);
+
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await SampleDataSeeder.SeedAsync(dbContext);
 }
 
 app.Run();
