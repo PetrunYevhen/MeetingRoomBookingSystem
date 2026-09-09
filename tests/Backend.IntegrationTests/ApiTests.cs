@@ -7,6 +7,7 @@ using Xunit;
 
 namespace Backend.IntegrationTests;
 
+[Collection(DatabaseCollection.Name)]
 public sealed class ApiTests : IClassFixture<ApiApplicationFactory>
 {
     private const string AllowedOrigin = "http://localhost:5173";
@@ -69,10 +70,14 @@ public sealed class ApiTests : IClassFixture<ApiApplicationFactory>
     private sealed record HealthResponse(string Status);
 }
 
-public sealed class ApiApplicationFactory : WebApplicationFactory<Program>
+public sealed class ApiApplicationFactory(SqlServerContainerFixture sqlFixture) : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
+
+        // Overrides appsettings.Development.json's docker-compose connection string with
+        // the Testcontainers instance, so tests never depend on a manually started DB.
+        builder.UseSetting("ConnectionStrings:Default", sqlFixture.ConnectionString);
     }
 }
