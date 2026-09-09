@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import {
@@ -6,13 +7,16 @@ import {
   Button,
   Chip,
   Container,
-  List,
-  ListItem,
-  ListItemText,
+  Divider,
   Paper,
+  Skeleton,
   Stack,
   Typography,
 } from '@mui/material'
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded'
+import EventBusyRoundedIcon from '@mui/icons-material/EventBusyRounded'
+import EventAvailableRoundedIcon from '@mui/icons-material/EventAvailableRounded'
+import { AppHeader } from '../components/AppHeader'
 import { ApiError } from '../api/httpClient'
 import {
   createBooking,
@@ -24,6 +28,32 @@ import {
   slotsQueryKey,
   useResourceSlotsRealtime,
 } from '../hooks/useResourceSlotsRealtime'
+
+const dayFormatter = new Intl.DateTimeFormat(undefined, {
+  weekday: 'long',
+  month: 'long',
+  day: 'numeric',
+})
+const timeFormatter = new Intl.DateTimeFormat(undefined, {
+  hour: 'numeric',
+  minute: '2-digit',
+})
+
+function groupByDay(slots: TimeSlotDto[]) {
+  const groups = new Map<string, TimeSlotDto[]>()
+  for (const slot of slots) {
+    const dayKey = new Date(slot.startUtc).toDateString()
+    const group = groups.get(dayKey)
+    if (group) {
+      group.push(slot)
+    } else {
+      groups.set(dayKey, [slot])
+    }
+  }
+  return [...groups.entries()].sort(
+    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime(),
+  )
+}
 
 export function ResourceSchedulePage() {
   const { resourceId } = useParams() as { resourceId: string }
@@ -52,56 +82,133 @@ export function ResourceSchedulePage() {
     },
   })
 
+  const dayGroups = useMemo(
+    () => groupByDay(slotsQuery.data ?? []),
+    [slotsQuery.data],
+  )
+  const bookingTimeSlotId = bookMutation.variables
+
   return (
-    <Box component="main" sx={{ py: { xs: 4, md: 8 } }}>
-      <Container maxWidth="sm">
-        <Stack spacing={3}>
-          <Typography component="h1" variant="h4">
-            {resourceQuery.data?.name ?? 'Room'}
+    <Box component="main" sx={{ minHeight: '100vh' }}>
+      <AppHeader backTo="/resources" />
+
+      <Container maxWidth="sm" sx={{ py: { xs: 4, md: 6 } }}>
+        <Stack spacing={0.5} sx={{ mb: 4 }}>
+          {resourceQuery.isPending ? (
+            <Skeleton width={220} height={44} />
+          ) : (
+            <Typography variant="h4">
+              {resourceQuery.data?.name ?? 'Room'}
+            </Typography>
+          )}
+          <Typography color="text.secondary">
+            Book an open slot — everyone watching this room sees it update live.
           </Typography>
-
-          {slotsQuery.isError && (
-            <Alert severity="error">Could not load the schedule.</Alert>
-          )}
-          {bookMutation.isError && (
-            <Alert severity="error">
-              {bookMutation.error instanceof ApiError
-                ? bookMutation.error.message
-                : 'Could not create the booking.'}
-            </Alert>
-          )}
-
-          <Paper elevation={1}>
-            <List>
-              {slotsQuery.data?.map((slot) => (
-                <ListItem
-                  key={slot.id}
-                  secondaryAction={
-                    slot.status === 'available' ? (
-                      <Button
-                        variant="contained"
-                        size="small"
-                        disabled={bookMutation.isPending}
-                        onClick={() => bookMutation.mutate(slot.id)}
-                      >
-                        Book
-                      </Button>
-                    ) : undefined
-                  }
-                >
-                  <ListItemText
-                    primary={`${new Date(slot.startUtc).toLocaleString()} – ${new Date(slot.endUtc).toLocaleTimeString()}`}
-                  />
-                  <Chip
-                    label={slot.status}
-                    color={slot.status === 'booked' ? 'default' : 'success'}
-                    sx={{ mr: 2 }}
-                  />
-                </ListItem>
-              ))}
-            </List>
-          </Paper>
         </Stack>
+
+        {slotsQuery.isError && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            Could not load the schedule.
+          </Alert>
+        )}
+        {bookMutation.isError && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {bookMutation.error instanceof ApiError
+              ? bookMutation.error.message
+              : 'Could not create the booking.'}
+          </Alert>
+        )}
+
+        {slotsQuery.isPending && (
+          <Stack spacing={2}>
+            {Array.from({ length: 3 }, (_, index) => (
+              <Skeleton
+                key={index}
+                variant="rounded"
+                height={140}
+                sx={{ borderRadius: 4 }}
+              />
+            ))}
+          </Stack>
+        )}
+
+        <Stack spacing={3}>
+          {dayGroups.map(([dayKey, slots]) => (
+            <Box key={dayKey}>
+              <Typography
+                variant="overline"
+                sx={{ color: 'text.secondary', fontWeight: 700, pl: 0.5 }}
+              >
+                {dayFormatter.format(new Date(dayKey))}
+              </Typography>
+              <Paper elevation={1} sx={{ mt: 1, overflow: 'hidden' }}>
+                <Stack divider={<Divider />}>
+                  {slots.map((slot) => {
+                    const isAvailable = slot.status === 'available'
+                    const isBooking =
+                      bookMutation.isPending && bookingTimeSlotId === slot.id
+
+                    return (
+                      <Stack
+                        key={slot.id}
+                        direction="row"
+                        spacing={2}
+                        sx={{
+                          alignItems: 'center',
+                          px: 2.5,
+                          py: 1.75,
+                        }}
+                      >
+                        {isAvailable ? (
+                          <EventAvailableRoundedIcon color="success" />
+                        ) : (
+                          <EventBusyRoundedIcon
+                            sx={{ color: 'text.disabled' }}
+                          />
+                        )}
+
+                        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                          <Typography sx={{ fontWeight: 600 }}>
+                            {timeFormatter.format(new Date(slot.startUtc))} –{' '}
+                            {timeFormatter.format(new Date(slot.endUtc))}
+                          </Typography>
+                        </Box>
+
+                        {isAvailable ? (
+                          <Button
+                            variant="contained"
+                            size="small"
+                            disabled={bookMutation.isPending}
+                            onClick={() => bookMutation.mutate(slot.id)}
+                          >
+                            {isBooking ? 'Booking…' : 'Book'}
+                          </Button>
+                        ) : (
+                          <Chip
+                            icon={<CheckCircleRoundedIcon />}
+                            label="Booked"
+                            size="small"
+                            sx={{
+                              bgcolor: 'action.selected',
+                              color: 'text.secondary',
+                            }}
+                          />
+                        )}
+                      </Stack>
+                    )
+                  })}
+                </Stack>
+              </Paper>
+            </Box>
+          ))}
+        </Stack>
+
+        {slotsQuery.isSuccess && dayGroups.length === 0 && (
+          <Box sx={{ textAlign: 'center', py: 8, color: 'text.secondary' }}>
+            <EventBusyRoundedIcon sx={{ fontSize: 48, mb: 1, opacity: 0.5 }} />
+            <Typography>No time slots for this room yet.</Typography>
+          </Box>
+        )}
       </Container>
     </Box>
   )

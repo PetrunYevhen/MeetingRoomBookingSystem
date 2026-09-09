@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Container,
@@ -10,6 +11,8 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import LockRoundedIcon from '@mui/icons-material/LockRounded'
+import MeetingRoomRoundedIcon from '@mui/icons-material/MeetingRoomRounded'
 import { ApiError } from '../api/httpClient'
 import { useAuth } from '../auth/useAuth'
 
@@ -37,25 +40,61 @@ export function LoginPage() {
   }
 
   return (
-    <Box component="main" sx={{ py: { xs: 6, md: 12 } }}>
+    <Box
+      component="main"
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        py: 6,
+        background:
+          'radial-gradient(1200px 600px at 15% -10%, rgba(52, 87, 213, 0.16), transparent), ' +
+          'radial-gradient(900px 500px at 110% 10%, rgba(0, 184, 169, 0.14), transparent), ' +
+          '#f3f5fb',
+      }}
+    >
       <Container maxWidth="xs">
-        <Paper elevation={2} sx={{ p: { xs: 3, sm: 5 } }}>
+        <Stack spacing={3} sx={{ alignItems: 'center', mb: 4 }}>
+          <Avatar
+            sx={{
+              width: 56,
+              height: 56,
+              background: 'linear-gradient(135deg, #3457d5, #00b8a9)',
+              boxShadow: '0 12px 30px -10px rgba(52, 87, 213, 0.6)',
+            }}
+          >
+            <MeetingRoomRoundedIcon />
+          </Avatar>
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="h4" sx={{ fontWeight: 800 }}>
+              Meeting Room Booking
+            </Typography>
+            <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+              Sign in to view rooms and reserve a slot.
+            </Typography>
+          </Box>
+        </Stack>
+
+        <Paper elevation={2} sx={{ p: { xs: 3, sm: 4 } }}>
           <Stack
             component="form"
             onSubmit={(event: FormEvent) => void handleSubmit(event)}
-            spacing={3}
+            spacing={2.5}
           >
-            <Box>
-              <Typography component="h1" variant="h4" gutterBottom>
-                Sign in
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ alignItems: 'center', color: 'text.secondary' }}
+            >
+              <LockRoundedIcon fontSize="small" />
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                Secure sign in
               </Typography>
-              <Typography color="text.secondary">
-                Meeting Room Booking
-              </Typography>
-            </Box>
+            </Stack>
 
             <TextField
               autoFocus
+              fullWidth
               label="Email"
               type="email"
               value={email}
@@ -63,6 +102,7 @@ export function LoginPage() {
               required
             />
             <TextField
+              fullWidth
               label="Password"
               type="password"
               value={password}
@@ -72,8 +112,14 @@ export function LoginPage() {
 
             {error && <Alert severity="error">{error}</Alert>}
 
-            <Button type="submit" variant="contained" disabled={isSubmitting}>
-              Sign in
+            <Button
+              type="submit"
+              variant="contained"
+              size="large"
+              disabled={isSubmitting}
+              fullWidth
+            >
+              {isSubmitting ? 'Signing in…' : 'Sign in'}
             </Button>
           </Stack>
         </Paper>
