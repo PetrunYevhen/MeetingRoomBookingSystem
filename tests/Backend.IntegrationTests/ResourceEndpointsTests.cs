@@ -217,6 +217,25 @@ public sealed class ResourceEndpointsTests : IClassFixture<ApiApplicationFactory
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
+    [Fact]
+    public async Task GetResourceSlots_SerializesTimestampsAsExplicitUtc()
+    {
+        var adminToken = await AdminTokenAsync();
+        var (resourceId, _) = await _client.CreateResourceAsAdminAsync(adminToken);
+        var start = new DateTime(2030, 5, 4, 9, 0, 0, DateTimeKind.Utc);
+        await _client.CreateSlotAsAdminAsync(adminToken, resourceId, start, start.AddHours(1));
+
+        var response = await _client.SendAuthorizedAsync(
+            HttpMethod.Get, $"/api/v1/resources/{resourceId}/slots", adminToken);
+        var payload = await response.Content.ReadAsStringAsync();
+
+        // Without the offset a client is free to read a UTC instant as local wall-clock
+        // time — exactly what the SPA's `new Date(...)` does — so the `Z` is part of the
+        // contract, not cosmetic (see `ApplicationDbContext`'s UTC value converter).
+        Assert.Contains("\"startUtc\":\"2030-05-04T09:00:00Z\"", payload);
+        Assert.Contains("\"endUtc\":\"2030-05-04T10:00:00Z\"", payload);
+    }
+
     private async Task<string> AdminTokenAsync() =>
         await _client.LoginAsAdminAsync(_factory.Services.GetRequiredService<IConfiguration>());
 
