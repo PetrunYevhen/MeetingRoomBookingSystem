@@ -56,7 +56,7 @@ export function HealthPage() {
                 sx={{ fontWeight: 700 }}
                 variant="overline"
               >
-                Stage 2 foundation
+                Diagnostics
               </Typography>
               <Typography component="h1" variant="h3" gutterBottom>
                 Meeting Room Booking
