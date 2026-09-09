@@ -201,3 +201,54 @@ npm --prefix src/Frontend run build
 ```
 
 The backend unit tests cover startup CORS-origin validation, the EF Core model's schema guarantees (the `UX_Bookings_TimeSlotId` unique index, the slot-duplication and refresh-token-hash unique indexes, FK delete behavior, and the start-before-end check constraint), and JWT claim/expiry contents. Integration tests cover health, OpenAPI, the allowed frontend origin, suppression of CORS headers for an untrusted origin, that migrations apply cleanly against a real SQL Server, the full auth flow — register/login/me, the refresh `Origin` check, refresh-token rotation and reuse-detection revoking a whole token family, logout, and admin-bootstrap login — the Resources module (browsing, the `User`/`Admin` authorization boundary, schedule status/date filtering, and every flagged conflict), the booking concurrency guarantee: **`BookingEndpointsTests.CreateBooking_ConcurrentRequestsForSameSlot_ExactlyOneSucceeds`** fires 15 real concurrent `POST /api/v1/bookings` requests at the same slot through a `Barrier`, asserts every response is `201`/`409` (explicitly ruling out a `500`), exactly one `201`, fourteen `409 slot_already_booked`, exactly one `Booking` row in the database, and exactly one notification fired — and the Realtime module: `RealtimeTests` connects a real SignalR client to the test host and proves a `WatchResource`-subscribed connection actually receives `SlotBookingChanged` with the correct payload when a booking is created through HTTP, that a connection watching a different resource does not, that connecting without a token is rejected, and that watching an unknown resource throws. Manually verified end-to-end in a real browser too: two signed-in users viewing the same room, one books, the other's screen updates with no refresh.
+
+## Deploy to Azure
+
+| Resource | SKU | Region |
+| --- | --- | --- |
+| Resource group `rg-meeting-room-booking` | — | Sweden Central |
+| SQL Server `sql-mrb-9b8875` + Database `sqldb-meetingroombooking` | Basic, 5 DTU | Sweden Central |
+| SignalR Service `signalr-mrb-9b8875` | Free_F1, Default mode | Sweden Central |
+| App Service Plan `asp-mrb-9b8875` + Web App `api-mrb-9b8875` (backend) | F1 Free | Sweden Central |
+| Application Insights `appi-mrb-9b8875` | codeless auto-instrumentation on the backend Web App | Sweden Central |
+| Static Web App `swa-mrb-9b8875` (frontend) | Free | West Europe |
+
+**Live URLs**: backend `https://api-mrb-9b8875.azurewebsites.net`, frontend `https://brave-moss-0cd9c9e03.3.azurestaticapps.net`.
+
+**Region rationale**: this subscription's Free Trial quota blocks Basic-tier SQL provisioning in West Europe/North Europe; Sweden Central has no such restriction and offers the same SKUs. Static Web Apps aren't offered in Sweden Central at all, so the frontend uses the nearest supported region (West Europe) — that's just metadata placement, not a latency concern, since Static Web Apps serve through a global CDN regardless.
+
+**Frontend hosting deviates from ADR 0001's original wording** ("Deploy the API and SPA as separate Azure Web Apps") — the ADR has been updated to Static Web App, with the rationale recorded there: free tier, built-in SPA fallback routing, native GitHub Actions deploy action, versus paying for and hand-configuring a second Web App plan just to serve static files.
+
+**Free F1 tier trade-off**: the backend Web App has no "Always On" — it unloads after ~20 minutes idle, so the first request after a quiet period takes an extra 10-30s to cold-start. Hit `/health` once before a live demo to warm it up.
+
+### Infrastructure
+
+`infra/provision.sh` is the exact, commented `az` script used to create every resource above and wire up GitHub's OIDC federated identity — read it top to bottom to see precisely what exists and why, or re-run it (with `MRB_SUFFIX` pinned) to reproduce the setup from scratch.
+
+### CI/CD
+
+Two GitHub Actions workflows:
+
+- **`.github/workflows/ci.yml`** — on every push/PR to `main`: the same backend (`dotnet restore --locked-mode` / `build` / `test` / `format --verify-no-changes`) and frontend (`npm ci` / `lint` / `format:check` / `build`) checks as the [Verify](#verify) section above. A required gate, not a deploy.
+- **`.github/workflows/deploy.yml`** — on push to `main` (or manual `workflow_dispatch`), two independent jobs:
+  - `deploy-backend`: publishes the API, authenticates to Azure via OIDC (no stored Azure credential — an App Registration with a federated credential trusting GitHub's OIDC issuer, `Contributor` scoped to only this resource group), opens a firewall rule for the runner's own IP, runs `dotnet ef database update` against the production database (the "controlled deploy-time migration" — the app itself never auto-migrates outside Development), closes the firewall rule, then zip-deploys to the Web App.
+  - `deploy-frontend`: builds the SPA with `VITE_API_BASE_URL` pointed at the backend, deploys `dist/` to the Static Web App using its deployment token.
+
+Bootstrapping a new environment needs these GitHub secrets/variables (all set by `infra/provision.sh`): secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_SQL_CONNECTION_STRING`, `AZURE_STATIC_WEB_APPS_API_TOKEN`; variables `VITE_API_BASE_URL`, `AZURE_SQL_SERVER_NAME`, `AZURE_WEBAPP_NAME`, `AZURE_RESOURCE_GROUP`.
+
+To run a migration by hand instead of through CI:
+
+```sh
+dotnet ef database update \
+  --project src/Backend/MeetingRoomBooking.Api.csproj \
+  --connection "<production connection string>"
+```
+
+### Teardown
+
+Once review is finished, delete everything to stop the SQL Basic-tier charge:
+
+```sh
+az group delete --name rg-meeting-room-booking --yes
+az ad app delete --id "$(az ad app list --display-name gh-actions-mrb-deploy --query '[0].appId' -o tsv)"
+```

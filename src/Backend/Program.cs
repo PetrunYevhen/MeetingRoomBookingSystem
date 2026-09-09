@@ -55,10 +55,18 @@ builder.Services.AddSingleton<JwtTokenService>();
 builder.Services.AddScoped<RefreshTokenService>();
 builder.Services.AddSingleton<IBookingNotifier, SignalRBookingNotifier>();
 
-builder.Services
+var signalRBuilder = builder.Services
     .AddSignalR()
     .AddJsonProtocol(options =>
         options.PayloadSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase);
+
+// Production uses Azure SignalR Service (ADR 0001); local development and the test host
+// have no such connection string configured, so they keep the in-process hub untouched.
+var azureSignalRConnectionString = builder.Configuration["Azure:SignalR:ConnectionString"];
+if (!string.IsNullOrEmpty(azureSignalRConnectionString))
+{
+    signalRBuilder.AddAzureSignalR(azureSignalRConnectionString);
+}
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -134,23 +142,29 @@ app.MapAdminResourceEndpoints();
 app.MapBookingEndpoints();
 app.MapHub<BookingHub>("/hubs/bookings");
 
-// Production migration/seeding is a deliberate deploy-time step (not yet built; this
-// stage has no deployment pipeline). Development auto-applies so `dotnet run` and the
-// test host always start from a known, migrated, seeded schema.
+// Migration is a deliberate deploy-time step in every environment but Development (CI
+// runs `dotnet ef database update` before a deploy); Development auto-applies so
+// `dotnet run` and the test host always start from a known, migrated schema.
 if (app.Environment.IsDevelopment())
 {
     await using var scope = app.Services.CreateAsyncScope();
-
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     await dbContext.Database.MigrateAsync();
+    await DevelopmentDataSeeder.SeedAsync(dbContext);
+}
+
+// Role/admin seeding runs in every environment: both are idempotent and config-gated
+// (AdminSeeder no-ops without Admin:Email/Admin:Password), so this is what actually
+// satisfies ADR 0001's "administrators are provisioned through a controlled
+// deployment/seed process" instead of that only ever happening in Development.
+{
+    await using var scope = app.Services.CreateAsyncScope();
 
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
     await RoleSeeder.SeedAsync(roleManager);
 
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
     await AdminSeeder.SeedAsync(userManager, app.Configuration, app.Logger);
-
-    await DevelopmentDataSeeder.SeedAsync(dbContext);
 }
 
 app.Run();

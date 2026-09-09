@@ -11,7 +11,7 @@ The defining correctness requirement is that concurrent requests must never crea
 
 ## Decision
 
-Build one ASP.NET Core 9 modular-monolith backend, one Vite React TypeScript SPA, and one relational database. Keep the backend features in explicit modules while sharing a single host, EF Core `DbContext`, and migration stream. Deploy the API and SPA as separate Azure Web Apps.
+Build one ASP.NET Core 9 modular-monolith backend, one Vite React TypeScript SPA, and one relational database. Keep the backend features in explicit modules while sharing a single host, EF Core `DbContext`, and migration stream. Deploy the API to an Azure Web App and the SPA to an Azure Static Web App — the task's own notes leave this an open interpretation, and Static Web App's free tier, built-in SPA fallback routing, and native GitHub Actions deploy action fit a static Vite build better than paying for a second Web App plan.
 
 This gives the project clear internal ownership without introducing distributed transactions or operational overhead between backend services. Module boundaries are code boundaries; deployment and database consistency remain those of one application.
 
@@ -178,12 +178,12 @@ The frontend does not decide booking availability or resolve concurrent writes. 
 
 ```text
 Browser
-  ├── HTTPS static application ─────────────> Azure Web App: SPA
+  ├── HTTPS static application ─────────────> Azure Static Web App: SPA
   ├── HTTPS REST + credentials/JWT ─────────> Azure Web App: API ───> Azure SQL Database
   └── negotiate via API, then WebSocket ────> Azure SignalR Service <── API SignalR SDK
 ```
 
-The API Web App is the only component with database credentials and Azure SignalR connection settings. JWT signing material, SQL connection strings, and service credentials are supplied through protected Azure configuration (and Key Vault references where configured), never source control. The API's CORS configuration contains the deployed SPA origin. Health endpoints and telemetry belong to the API deployment; neither exposes secrets.
+The API Web App is the only component with database credentials and Azure SignalR connection settings. JWT signing material, SQL connection strings, and service credentials are supplied through protected Azure configuration (App Service application settings, and Key Vault references where configured), never source control. The API's CORS configuration contains the deployed Static Web App origin. Health endpoints and telemetry belong to the API deployment; neither exposes secrets.
 
 ## Consequences
 

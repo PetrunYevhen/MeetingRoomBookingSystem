@@ -1,0 +1,88 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - run: dotnet publish src/Backend/MeetingRoomBooking.Api.csproj -c Release -o ./publish
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Allow this runner through the SQL Server firewall
+        run: |
+          RUNNER_IP=$(curl -s https://api.ipify.org)
+          az sql server firewall-rule create \
+            --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
+            --server ${{ vars.AZURE_SQL_SERVER_NAME }} \
+            --name github-actions-runner \
+            --start-ip-address "$RUNNER_IP" \
+            --end-ip-address "$RUNNER_IP"
+
+      - run: dotnet tool restore
+
+      - name: Apply EF Core migrations
+        run: >
+          dotnet ef database update
+          --project src/Backend/MeetingRoomBooking.Api.csproj
+          --connection "${{ secrets.AZURE_SQL_CONNECTION_STRING }}"
+
+      - name: Remove the temporary firewall rule
+        if: always()
+        run: |
+          az sql server firewall-rule delete \
+            --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
+            --server ${{ vars.AZURE_SQL_SERVER_NAME }} \
+            --name github-actions-runner \
+            --yes || true
+
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          package: ./publish
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/Frontend/package-lock.json
+
+      - run: npm ci
+        working-directory: src/Frontend
+
+      - run: npm run build
+        working-directory: src/Frontend
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+
+      - uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: src/Frontend/dist
+          output_location: ""
+          skip_app_build: true

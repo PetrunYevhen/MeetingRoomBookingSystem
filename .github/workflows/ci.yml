@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - run: dotnet restore --locked-mode
+      - run: dotnet build --no-restore
+      - run: dotnet test --no-build
+      - run: dotnet format --verify-no-changes --no-restore
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/Frontend/package-lock.json
+
+      - run: npm ci
+        working-directory: src/Frontend
+      - run: npm run lint
+        working-directory: src/Frontend
+      - run: npm run format:check
+        working-directory: src/Frontend
+      - run: npm run build
+        working-directory: src/Frontend
