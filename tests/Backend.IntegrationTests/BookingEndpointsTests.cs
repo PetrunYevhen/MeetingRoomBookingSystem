@@ -130,9 +130,10 @@ public sealed class BookingEndpointsTests : IClassFixture<BookingApiApplicationF
         var bookingCount = await dbContext.Bookings.CountAsync(b => b.TimeSlotId == slot.Id);
         Assert.Equal(1, bookingCount);
 
-        // Adapted from ADR 0002 step 7 ("no losing request produces a SlotBookingChanged
-        // notification"): the real SignalR publisher doesn't exist yet, so this asserts
-        // the seam it will plug into fired exactly once, for the winner only.
+        // ADR 0002 step 7 ("no losing request produces a SlotBookingChanged
+        // notification"): asserted at the `IBookingNotifier` seam — the same seam
+        // `SignalRBookingNotifier` occupies in production — so it holds regardless of the
+        // delivery channel. `RealtimeTests` covers the SignalR side over a real client.
         Assert.Equal(1, _factory.Notifier.CallCount - notifiedBefore);
     }
 
@@ -169,7 +170,7 @@ public sealed class CountingBookingNotifier : IBookingNotifier
 /// <summary>
 /// Same pattern as <see cref="ApiApplicationFactory"/>, plus swapping in a
 /// <see cref="CountingBookingNotifier"/> so booking tests can assert notification counts
-/// without depending on the real (not-yet-built) SignalR publisher.
+/// at the seam, without a SignalR client in the loop (`RealtimeTests` covers that end).
 /// </summary>
 public sealed class BookingApiApplicationFactory(SqlServerContainerFixture sqlFixture) : WebApplicationFactory<Program>
 {
