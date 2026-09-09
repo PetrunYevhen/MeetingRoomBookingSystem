@@ -7,6 +7,17 @@ internal sealed record ResourceDto(Guid Id, string Name);
 
 internal sealed record TimeSlotDto(Guid Id, DateTime StartUtc, DateTime EndUtc, string Status);
 
+internal sealed record AdminBookingDto(
+    Guid Id,
+    Guid ResourceId,
+    string ResourceName,
+    Guid TimeSlotId,
+    DateTime StartUtc,
+    DateTime EndUtc,
+    Guid UserId,
+    string UserEmail,
+    DateTime CreatedAtUtc);
+
 internal sealed record UserProfileDto(Guid Id, string Email, string[] Roles);
 
 internal sealed record AuthResponseDto(string AccessToken, DateTime AccessTokenExpiresAtUtc, UserProfileDto User);

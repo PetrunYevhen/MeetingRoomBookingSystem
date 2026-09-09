@@ -140,6 +140,7 @@ app.MapAuthEndpoints(allowedOrigins);
 app.MapResourceEndpoints();
 app.MapAdminResourceEndpoints();
 app.MapBookingEndpoints();
+app.MapAdminBookingEndpoints();
 app.MapHub<BookingHub>("/hubs/bookings");
 
 // Migration is a deliberate deploy-time step in every environment but Development (CI
