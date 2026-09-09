@@ -127,12 +127,19 @@ az webapp config appsettings set \
 APP_ID=$(az ad app create --display-name "$APP_REGISTRATION_NAME" --query appId -o tsv)
 az ad sp create --id "$APP_ID"
 
+# NOTE: this account's GitHub OIDC tokens include immutable owner/repo IDs in the
+# subject claim (`repo:OWNER@OWNERID/REPO@REPOID:ref:...`), not the plain
+# `repo:OWNER/REPO:ref:...` form GitHub's own docs lead with. If `azure/login`
+# fails with AADSTS700213, its error message quotes the exact subject GitHub
+# actually sent — use that verbatim rather than guessing the format.
+GITHUB_OIDC_SUBJECT="repo:PetrunYevhen@181228492/MeetingRoomBookingSystem@1360308431:ref:refs/heads/main"
+
 az ad app federated-credential create \
   --id "$APP_ID" \
   --parameters "{
     \"name\": \"gh-main\",
     \"issuer\": \"https://token.actions.githubusercontent.com\",
-    \"subject\": \"repo:${GITHUB_REPO}:ref:refs/heads/main\",
+    \"subject\": \"${GITHUB_OIDC_SUBJECT}\",
     \"audiences\": [\"api://AzureADTokenExchange\"]
   }"
 
