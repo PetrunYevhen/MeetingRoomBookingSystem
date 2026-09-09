@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type PropsWithChildren } from 'react'
 import * as authApi from '../api/authApi'
 import {
+  ADMIN_ROLE,
   AuthContext,
   type AuthContextValue,
   type AuthUser,
@@ -44,6 +45,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
     [applySession],
   )
 
+  /** Registers a `User` and signs straight in, so the SPA never dead-ends on a fresh account. */
+  const register = useCallback(
+    async (email: string, password: string) => {
+      await authApi.register(email, password)
+      applySession(await authApi.login(email, password))
+    },
+    [applySession],
+  )
+
   const logout = useCallback(async () => {
     await authApi.logout(accessToken).catch(() => undefined)
     setUser(null)
@@ -52,9 +62,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const value: AuthContextValue = {
     user,
+    isAdmin: user?.roles.includes(ADMIN_ROLE) ?? false,
     accessToken,
     isInitializing,
     login,
+    register,
     logout,
   }
 

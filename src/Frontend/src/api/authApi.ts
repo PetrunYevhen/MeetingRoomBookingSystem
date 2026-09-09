@@ -12,6 +12,16 @@ export interface AuthResponseDto {
   user: AuthUserDto
 }
 
+export function register(
+  email: string,
+  password: string,
+): Promise<AuthUserDto> {
+  return apiFetch<AuthUserDto>('/api/v1/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+}
+
 export function login(
   email: string,
   password: string,

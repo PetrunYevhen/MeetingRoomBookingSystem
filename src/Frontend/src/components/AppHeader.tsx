@@ -12,8 +12,10 @@ import {
   Typography,
 } from '@mui/material'
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded'
+import EventNoteRoundedIcon from '@mui/icons-material/EventNoteRounded'
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import MeetingRoomRoundedIcon from '@mui/icons-material/MeetingRoomRounded'
+import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded'
 import { useAuth } from '../auth/useAuth'
 
 interface AppHeaderProps {
@@ -23,7 +25,7 @@ interface AppHeaderProps {
 }
 
 export function AppHeader({ title, backTo, action }: AppHeaderProps) {
-  const { user, logout } = useAuth()
+  const { user, isAdmin, logout } = useAuth()
   const navigate = useNavigate()
 
   return (
@@ -73,8 +75,26 @@ export function AppHeader({ title, backTo, action }: AppHeaderProps) {
 
         {user && (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            {user.roles.includes('Admin') && (
-              <Chip label="Admin" color="secondary" size="small" />
+            {isAdmin && (
+              <>
+                <Tooltip title="Manage rooms">
+                  <IconButton
+                    aria-label="Manage rooms"
+                    onClick={() => navigate('/admin/resources')}
+                  >
+                    <SettingsRoundedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="All bookings">
+                  <IconButton
+                    aria-label="All bookings"
+                    onClick={() => navigate('/admin/bookings')}
+                  >
+                    <EventNoteRoundedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Chip label="Admin" color="secondary" size="small" />
+              </>
             )}
             <Chip
               label={user.email}

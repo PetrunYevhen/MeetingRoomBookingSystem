@@ -12,13 +12,20 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import LockRoundedIcon from '@mui/icons-material/LockRounded'
 import MeetingRoomRoundedIcon from '@mui/icons-material/MeetingRoomRounded'
+import PersonAddAlt1RoundedIcon from '@mui/icons-material/PersonAddAlt1Rounded'
 import { ApiError } from '../api/httpClient'
 import { useAuth } from '../auth/useAuth'
 
-export function LoginPage() {
-  const { login } = useAuth()
+/**
+ * Self-service sign-up for the `User` role — the API has always exposed
+ * `POST /api/v1/auth/register`, and this is the screen that makes it reachable, so a
+ * reviewer can create their own account (and a second one, in another browser, to watch
+ * the realtime update land) without any admin doing it for them. Admins are never
+ * created here: the API assigns `User` regardless of what the client sends.
+ */
+export function RegisterPage() {
+  const { register } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -31,10 +38,12 @@ export function LoginPage() {
     setIsSubmitting(true)
 
     try {
-      await login(email, password)
+      await register(email, password)
       navigate('/resources', { replace: true })
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not sign in.')
+      setError(
+        err instanceof ApiError ? err.message : 'Could not create the account.',
+      )
     } finally {
       setIsSubmitting(false)
     }
@@ -68,10 +77,10 @@ export function LoginPage() {
           </Avatar>
           <Box sx={{ textAlign: 'center' }}>
             <Typography variant="h4" sx={{ fontWeight: 800 }}>
-              Meeting Room Booking
+              Create an account
             </Typography>
             <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-              Sign in to view rooms and reserve a slot.
+              Sign up to browse rooms and reserve slots.
             </Typography>
           </Box>
         </Stack>
@@ -87,9 +96,9 @@ export function LoginPage() {
               spacing={1}
               sx={{ alignItems: 'center', color: 'text.secondary' }}
             >
-              <LockRoundedIcon fontSize="small" />
+              <PersonAddAlt1RoundedIcon fontSize="small" />
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                Secure sign in
+                New account
               </Typography>
             </Stack>
 
@@ -109,6 +118,7 @@ export function LoginPage() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               required
+              helperText="At least 6 characters, with an upper-case letter, a digit, and a symbol."
             />
 
             {error && <Alert severity="error">{error}</Alert>}
@@ -120,13 +130,13 @@ export function LoginPage() {
               disabled={isSubmitting}
               fullWidth
             >
-              {isSubmitting ? 'Signing in…' : 'Sign in'}
+              {isSubmitting ? 'Creating…' : 'Create account'}
             </Button>
 
             <Typography variant="body2" sx={{ textAlign: 'center' }}>
-              No account yet?{' '}
-              <Link component={RouterLink} to="/register">
-                Create one
+              Already have an account?{' '}
+              <Link component={RouterLink} to="/login">
+                Sign in
               </Link>
             </Typography>
           </Stack>
