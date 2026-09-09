@@ -14,11 +14,17 @@ coverage/
 # Frontend output
 **/node_modules/
 **/dist/
+*.tsbuildinfo
 
 # Local configuration and secrets
 .env
 .env.*
 !.env.example
+!src/Frontend/.env.development
 **/appsettings.Local.json
 **/appsettings.*.Local.json
 **/secrets.json
+
+# Test and tooling caches
+.eslintcache
+.nyc_output/
